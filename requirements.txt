@@ -18,7 +18,12 @@ boto3
 pycurl
 pillow
 langchain
-pinecone-client
+langchain-community
+langchain-openai
+pinecone
 bs4
 tiktoken
 pypdf
+requests
+beautifulsoup4
+unstructured

@@ -3,6 +3,9 @@ from pathlib import Path
 from corsheaders.defaults import default_headers
 from urllib.parse import quote
 
+# Import API keys and external service settings
+from .key_values import *
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 DJANGO_APPS = [
@@ -283,3 +286,44 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # CELERY_RESULT_BACKEND = 'django-db'  # using django-celery-results
 # CELERY_CACHE_BACKEND = 'django-cache'
 #
+
+# Memory Management Settings
+from chatbot.memory_settings import get_memory_settings
+
+CHATBOT_MEMORY_SETTINGS = get_memory_settings()
+
+# Individual memory settings for easy access
+CHATBOT_SHORT_TERM_MEMORY_LIMIT = int(os.getenv('CHATBOT_SHORT_TERM_MEMORY_LIMIT', 20))
+CHATBOT_LONG_TERM_IMPORTANCE_THRESHOLD = float(os.getenv('CHATBOT_LONG_TERM_IMPORTANCE_THRESHOLD', 0.7))
+CHATBOT_MEMORY_CLEANUP_INTERVAL_HOURS = int(os.getenv('CHATBOT_MEMORY_CLEANUP_INTERVAL_HOURS', 24))
+
+# Memory Management Settings for Chatbot
+from chatbot.memory_settings import get_memory_settings, get_default_personality, get_memory_types
+
+# Import memory settings
+CHATBOT_MEMORY_SETTINGS = get_memory_settings()
+CHATBOT_DEFAULT_PERSONALITY = get_default_personality()
+CHATBOT_MEMORY_TYPES = get_memory_types()
+
+# Apply memory settings as individual Django settings
+CHATBOT_SHORT_TERM_MEMORY_LIMIT = CHATBOT_MEMORY_SETTINGS['SHORT_TERM_MEMORY_LIMIT']
+CHATBOT_LONG_TERM_IMPORTANCE_THRESHOLD = CHATBOT_MEMORY_SETTINGS['LONG_TERM_IMPORTANCE_THRESHOLD']
+CHATBOT_CONVERSATION_CONTEXT_LIMIT = CHATBOT_MEMORY_SETTINGS['CONVERSATION_CONTEXT_LIMIT']
+CHATBOT_RELEVANT_MEMORIES_LIMIT = CHATBOT_MEMORY_SETTINGS['RELEVANT_MEMORIES_LIMIT']
+
+# Celery beat schedule for periodic memory maintenance
+from celery.schedules import crontab
+
+CELERY_BEAT_SCHEDULE = {
+    'memory-maintenance': {
+        'task': 'chatbot.tasks.periodic_memory_maintenance',
+        'schedule': crontab(hour=2, minute=0),  # Run daily at 2 AM
+    },
+    'cleanup-old-memories': {
+        'task': 'chatbot.tasks.cleanup_old_memories',
+        'schedule': crontab(hour=3, minute=0),  # Run daily at 3 AM
+    },
+}
+
+# User agent for web scraping
+USER_AGENT = 'RagChatbot/1.0 (Educational Purpose)'

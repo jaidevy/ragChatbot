@@ -24,6 +24,18 @@ urlpatterns = [
 
     # Create a message in a conversation
     path('conversations/<int:conversation_id>/messages/create/', views.MessageCreate.as_view(), name='message-create'),
+    
+    # Conversation context and memory endpoints
+    path('conversations/<int:conversation_id>/context/', views.ConversationContextView.as_view(), name='conversation-context'),
+    
+    # Memory management endpoints
+    path('memory/', views.UserMemoryListView.as_view(), name='user-memory-list'),
+    path('memory/search/', views.MemorySearchView.as_view(), name='memory-search'),
+    path('memory/<int:memory_id>/promote/', views.MemoryPromoteView.as_view(), name='memory-promote'),
+    
+    # User personality endpoints
+    path('personality/', views.UserPersonalityView.as_view(), name='user-personality'),
+    
     # async gpt task
     # path('conversations/task/<str:task_id>/', views.GPT3TaskStatus.as_view(), name='gpt_task_status'),
 ]

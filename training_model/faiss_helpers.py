@@ -2,13 +2,13 @@ import os
 import pickle
 import mimetypes
 from django.conf import settings
-from langchain.document_loaders import (
+from langchain_community.document_loaders import (
     CSVLoader,
     UnstructuredWordDocumentLoader,
     PyPDFLoader,
 )
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.vectorstores import FAISS as BaseFAISS
+from langchain_openai import OpenAIEmbeddings
+from langchain_community.vectorstores import FAISS as BaseFAISS
 
 OPENAI_API_KEY = settings.OPENAI_API_KEY
 BASE_DIR = settings.BASE_DIR

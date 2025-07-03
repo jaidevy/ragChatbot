@@ -4,25 +4,60 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlsplit
 import mimetypes
-from django.conf import settings
-from langchain.document_loaders import (
+from langchain_community.document_loaders import (
     CSVLoader,
     UnstructuredWordDocumentLoader,
     PyPDFLoader,
     WebBaseLoader,
 )
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.vectorstores import Pinecone
+from langchain_openai import OpenAIEmbeddings
+from langchain_community.vectorstores import Pinecone
 
-OPENAI_API_KEY = settings.OPENAI_API_KEY
-PINECONE_API_KEY = settings.PINECONE_API_KEY
-PINECONE_ENVIRONMENT = settings.PINECONE_ENVIRONMENT
-PINECONE_INDEX_NAME = settings.PINECONE_INDEX_NAME
-PINECONE_NAMESPACE_NAME = settings.PINECONE_NAMESPACE_NAME
-BASE_DIR = settings.BASE_DIR
-MODELS_DIR = os.path.join(BASE_DIR, "models")
+# Import settings only when needed to avoid circular imports
+def get_settings():
+    from django.conf import settings
+    return settings
 
-embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
+def get_api_keys():
+    settings = get_settings()
+    return {
+        'OPENAI_API_KEY': settings.OPENAI_API_KEY,
+        'PINECONE_API_KEY': settings.PINECONE_API_KEY,
+        'PINECONE_ENVIRONMENT': settings.PINECONE_ENVIRONMENT,
+        'PINECONE_INDEX_NAME': settings.PINECONE_INDEX_NAME,
+        'PINECONE_NAMESPACE_NAME': settings.PINECONE_NAMESPACE_NAME,
+        'BASE_DIR': settings.BASE_DIR,
+    }
+
+# Get settings when first imported
+_settings = None
+def _get_cached_settings():
+    global _settings
+    if _settings is None:
+        _settings = get_api_keys()
+    return _settings
+
+# Create embeddings instance
+_embeddings = None
+def get_embeddings():
+    global _embeddings
+    if _embeddings is None:
+        settings_dict = _get_cached_settings()
+        _embeddings = OpenAIEmbeddings(openai_api_key=settings_dict['OPENAI_API_KEY'])
+    return _embeddings
+
+# This will be initialized when first accessed
+@property
+def embeddings():
+    return get_embeddings()
+
+MODELS_DIR = None
+
+def get_models_dir():
+    global MODELS_DIR
+    if MODELS_DIR is None:
+        MODELS_DIR = os.path.join(_get_cached_settings()['BASE_DIR'], "models")
+    return MODELS_DIR
 
 
 class PineconeManager:
@@ -139,19 +174,23 @@ def build_or_update_pinecone_index(file_path, index_name, name_space):
     """
     This function is used to build or update the Pinecone Index
     """
-    pinecone_index_manager = PineconeIndexManager(PineconeManager(PINECONE_API_KEY, PINECONE_ENVIRONMENT), index_name)
+    settings_dict = _get_cached_settings()
+    pinecone_index_manager = PineconeIndexManager(
+        PineconeManager(settings_dict['PINECONE_API_KEY'], settings_dict['PINECONE_ENVIRONMENT']), 
+        index_name
+    )
     loader = DocumentLoaderFactory.get_loader(file_path)
     pages = loader.load_and_split()
 
     if pinecone_index_manager.index_exists():
         print("Updating the model")
         pinecone_index = Pinecone.from_documents(pages, embeddings, index_name=pinecone_index_manager.index_name,
-                                                 namespace=PINECONE_NAMESPACE_NAME)
+                                                 namespace=settings_dict['PINECONE_NAMESPACE_NAME'])
 
     else:
         print("Training the model")
         pinecone_index_manager.create_index(dimension=1536, metric="cosine")
         pinecone_index = Pinecone.from_documents(documents=pages, embedding=embeddings,
                                                  index_name=pinecone_index_manager.index_name,
-                                                 namespace=PINECONE_NAMESPACE_NAME)
+                                                 namespace=settings_dict['PINECONE_NAMESPACE_NAME'])
     return pinecone_index

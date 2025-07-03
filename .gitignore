@@ -139,3 +139,7 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 /facerecognition.sqlite
+
+
+#Ignore vscode AI rules
+.github\copilot-instructions.md
