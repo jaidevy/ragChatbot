@@ -1,5 +1,6 @@
 import os
 import mimetypes
+import re
 from django.conf import settings
 from langchain_community.document_loaders import (
     CSVLoader,
@@ -28,6 +29,36 @@ chroma_client = chromadb.PersistentClient(
 )
 
 
+def sanitize_collection_name(name):
+    """
+    Sanitize collection name to meet ChromaDB requirements:
+    - 3-512 characters
+    - Only [a-zA-Z0-9._-]
+    - Start and end with [a-zA-Z0-9]
+    """
+    # Remove invalid characters and replace with underscores
+    sanitized = re.sub(r'[^a-zA-Z0-9._-]', '_', name)
+    
+    # Ensure it starts and ends with alphanumeric
+    sanitized = re.sub(r'^[^a-zA-Z0-9]+', '', sanitized)
+    sanitized = re.sub(r'[^a-zA-Z0-9]+$', '', sanitized)
+    
+    # Remove consecutive underscores
+    sanitized = re.sub(r'_{2,}', '_', sanitized)
+    
+    # Ensure minimum length
+    if len(sanitized) < 3:
+        sanitized = f"collection_{sanitized}"
+    
+    # Ensure maximum length
+    if len(sanitized) > 512:
+        sanitized = sanitized[:512]
+        # Ensure it still ends with alphanumeric after truncation
+        sanitized = re.sub(r'[^a-zA-Z0-9]+$', '', sanitized)
+    
+    return sanitized
+
+
 def get_loader(file_path):
     mime_type, _ = mimetypes.guess_type(file_path)
 
@@ -52,8 +83,8 @@ def build_or_update_chroma_index(file_path, index_name):
     loader = get_loader(file_path)
     pages = loader.load_and_split()
     
-    # Create or get existing collection
-    collection_name = f"collection_{index_name}"
+    # Create sanitized collection name
+    collection_name = sanitize_collection_name(f"collection_{index_name}")
     
     try:
         # Try to get existing collection
@@ -79,9 +110,6 @@ def build_or_update_chroma_index(file_path, index_name):
             persist_directory=MODELS_DIR
         )
     
-    # Persist the changes
-    chroma_db.persist()
-    
     return chroma_db
 
 
@@ -90,7 +118,7 @@ def get_chroma_index(index_name):
     Load existing ChromaDB index
     """
     embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
-    collection_name = f"collection_{index_name}"
+    collection_name = sanitize_collection_name(f"collection_{index_name}")
     
     try:
         chroma_db = Chroma(
