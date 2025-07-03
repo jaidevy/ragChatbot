@@ -8,6 +8,7 @@ import os
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from .models import Document
+from .chroma_helpers import build_or_update_chroma_index
 from .pinecone_helpers import build_or_update_pinecone_index
 
 User = get_user_model()
@@ -40,11 +41,23 @@ class TrainView(View):
         file_path = file_name
 
         # Load and process files
-        build_or_update_pinecone_index(file_path, index_name, namespace)
-
-        # Update is_trained to True
-        document.is_trained = True
-        document.save()
+        if document.storage_type == 'CHROMA':
+            # Use ChromaDB for training
+            chroma_index = build_or_update_chroma_index(
+                file_path=document.file.path,
+                index_name=document.index_name
+            )
+            document.is_trained = True
+            document.save()
+        elif document.storage_type == 'PINECONE':
+            # Use Pinecone for training
+            pinecone_index = build_or_update_pinecone_index(
+                file_path=document.file.path,
+                index_name=document.index_name,
+                name_space=settings.PINECONE_NAMESPACE_NAME
+            )
+            document.is_trained = True
+            document.save()
 
         # Clean up the temporary directory
         os.remove(file_path)

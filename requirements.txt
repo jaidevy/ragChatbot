@@ -27,3 +27,4 @@ pypdf
 requests
 beautifulsoup4
 unstructured
+langchain-chroma

@@ -27,3 +27,4 @@ class AdList(generics.ListAPIView):
     """
     queryset = Ad.objects.all()
     serializer_class = AdSerializer
+    permission_classes = [permissions.AllowAny]

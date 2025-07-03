@@ -5,12 +5,12 @@ import json
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
 
-# from langchain.vectorstores import FAISS as BaseFAISS
 from training_model.pinecone_helpers import (
     PineconeManager,
     PineconeIndexManager,
     embeddings,
 )
+from training_model.chroma_helpers import get_chroma_index
 from langchain_community.vectorstores import Pinecone
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_core.messages import (
@@ -37,34 +37,6 @@ chat = ChatOpenAI(temperature=0, openai_api_key=OPENAI_API_KEY)
 embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
 
 
-#
-# class FAISS(BaseFAISS):
-#     """
-#     FAISS is a vector store that uses the FAISS library to store and search vectors.
-#     """
-#
-#     def save(self, file_path):
-#         with open(file_path, "wb") as f:
-#             pickle.dump(self, f)
-#
-#     @staticmethod
-#     def load(file_path):
-#         with open(file_path, "rb") as f:
-#             return pickle.load(f)
-
-#
-# def get_faiss_index(index_name):
-#     faiss_obj_path = os.path.join(settings.BASE_DIR, "models", "{}.pickle".format(index_name))
-#
-#     if os.path.exists(faiss_obj_path):
-#         # Load the FAISS object from disk
-#         try:
-#             faiss_index = FAISS.load(faiss_obj_path)
-#             return faiss_index
-#         except Exception as e:
-#             logger.error(f"Failed to load FAISS index: {e}")
-#             return None
-
 def get_pinecone_index(index_name, name_space):
     pinecone_manager = PineconeManager(PINECONE_API_KEY, PINECONE_ENVIRONMENT)
     pinecone_index_manager = PineconeIndexManager(pinecone_manager, index_name)
@@ -82,9 +54,10 @@ def get_pinecone_index(index_name, name_space):
 
 
 @shared_task
-def send_gpt_request_with_memory(message_list, user_id, conversation_id, name_space, system_prompt):
+def send_gpt_request_with_memory(message_list, user_id, conversation_id, name_space, system_prompt, storage_type='PINECONE', index_name=None):
     """
     Enhanced GPT request with seamless RAG and memory integration
+    Now supports both Pinecone and ChromaDB
     """
     try:
         user = User.objects.get(id=user_id)
@@ -94,8 +67,12 @@ def send_gpt_request_with_memory(message_list, user_id, conversation_id, name_sp
         # Get the current user message
         current_message = message_list[-1]["content"] if message_list else ""
         
-        # Load the Pinecone index for RAG retrieval
-        base_index = get_pinecone_index(PINECONE_INDEX_NAME, name_space)
+        # Load the appropriate vector store based on storage type
+        base_index = None
+        if storage_type == 'PINECONE':
+            base_index = get_pinecone_index(index_name or PINECONE_INDEX_NAME, name_space)
+        elif storage_type == 'CHROMA':
+            base_index = get_chroma_index(index_name or 'default')
         
         rag_docs = []
         if base_index:
@@ -548,13 +525,18 @@ def extract_and_store_conversation_memories(conversation_id):
 
 # Keep the original function for backward compatibility
 @shared_task
-def send_gpt_request(message_list, name_space, system_prompt):
+def send_gpt_request(message_list, name_space, system_prompt, storage_type='PINECONE', index_name=None):
     """
     Original GPT request function (kept for backward compatibility)
+    Now supports both Pinecone and ChromaDB
     """
     try:
-        # Load the Pinecone index
-        base_index = get_pinecone_index(PINECONE_INDEX_NAME, name_space)
+        # Load the appropriate vector store
+        base_index = None
+        if storage_type == 'PINECONE':
+            base_index = get_pinecone_index(index_name or PINECONE_INDEX_NAME, name_space)
+        elif storage_type == 'CHROMA':
+            base_index = get_chroma_index(index_name or 'default')
 
         if base_index:
             # Add extra text to the content of the last message
@@ -604,6 +586,24 @@ def analyze_rag_response_importance(message_id, rag_docs_used):
         
         # If RAG documents were used, increase importance
         base_importance = message.importance_score
+        if rag_docs_used and len(rag_docs_used) > 0:
+            # Increase importance based on number of relevant docs found
+            importance_boost = min(0.2 * len(rag_docs_used), 0.5)
+            message.importance_score = min(base_importance + importance_boost, 1.0)
+            message.save()
+            
+            # Store metadata about RAG usage
+            if not message.entities:
+                message.entities = []
+            message.entities.append({
+                'type': 'rag_retrieval',
+                'doc_count': len(rag_docs_used),
+                'timestamp': datetime.now().isoformat()
+            })
+            message.save()
+            
+    except Exception as e:
+        logger.error(f"Failed to analyze RAG response importance: {e}")
         if rag_docs_used and len(rag_docs_used) > 0:
             # Increase importance based on number of relevant docs found
             importance_boost = min(0.2 * len(rag_docs_used), 0.5)

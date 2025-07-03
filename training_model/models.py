@@ -3,10 +3,10 @@ import uuid
 from django.db import models
 
 
-def upload_to_faiss(instance, filename):
+def upload_to_chroma(instance, filename):
     basename, ext = os.path.splitext(filename)
     new_filename = f"{basename}_{uuid.uuid4().hex}{ext}"
-    return f'documents/faiss/{new_filename}'
+    return f'documents/chroma/{new_filename}'
 
 
 def upload_to_pinecone(instance, filename):
@@ -16,15 +16,15 @@ def upload_to_pinecone(instance, filename):
 
 
 def dynamic_upload_to(instance, filename):
-    if instance.storage_type == 'FAISS':
-        return upload_to_faiss(instance, filename)
+    if instance.storage_type == 'CHROMA':
+        return upload_to_chroma(instance, filename)
     else:
         return upload_to_pinecone(instance, filename)
 
 
 class Document(models.Model):
     CHOICES = (
-        ('FAISS', 'FAISS'),
+        ('CHROMA', 'CHROMA'),
         ('PINECONE', 'PINECONE')
     )
 
